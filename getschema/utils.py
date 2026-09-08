@@ -1,9 +1,15 @@
+import base64
+import hashlib
+import secrets
+
 from django.conf import settings
 
 from .models import FieldUsage
 
 import requests
 import json
+import uuid
+import redis
 
 
 def get_headers_for_schema(schema):
@@ -11,6 +17,34 @@ def get_headers_for_schema(schema):
         'Authorization': 'Bearer ' + schema.access_token, 
         'Content-Type': 'application/json'
     }
+
+
+def generate_state_uuid(environment):
+    target_uuid = uuid.uuid4().hex
+    code_verifier = base64.b64encode(secrets.token_bytes(64)).decode('utf-8')
+    code_challenge = hashlib.sha256(code_verifier.encode('utf-8')).hexdigest()
+    
+    r = redis.from_url(settings.REDIS_URL)
+    r.hsetex(target_uuid, mapping={
+        'environment': environment,
+        'code_verifier': code_verifier,
+        'code_challenge': code_challenge
+    },
+    ex=600)
+
+    return target_uuid, code_challenge
+
+
+def retrieve_state_uuid(target_uuid):
+    if target_uuid is None:
+        return None, None
+
+    r = redis.from_url(settings.REDIS_URL)
+    state_uuid = r.hgetall(target_uuid)
+    if state_uuid is not None and 'environment' in state_uuid and 'code_verifier' in state_uuid:
+        return state_uuid['environment'], state_uuid['code_verifier']
+
+    return None, None
 
 
 def get_urls_for_object(schema, object_name):

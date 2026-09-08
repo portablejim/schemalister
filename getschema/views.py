@@ -1,6 +1,7 @@
 from django.shortcuts import render, get_object_or_404
 from django.http import HttpResponse, HttpResponseRedirect
 from django.views.decorators.csrf import csrf_exempt
+from getschema import utils
 from getschema.models import Schema
 from getschema.forms import LoginForm
 from django.conf import settings
@@ -31,7 +32,9 @@ def index(request):
             if environment == 'Sandbox':
                 oauth_url = 'https://test.salesforce.com/services/oauth2/authorize'
 
-            oauth_url = oauth_url + '?response_type=code&client_id=' + settings.SALESFORCE_CONSUMER_KEY + '&redirect_uri=' + settings.SALESFORCE_REDIRECT_URI + '&scope=api&state='+ environment
+            state_uuid, code_challenge = utils.generate_state_uuid(environment)
+
+            oauth_url = oauth_url + '?response_type=code&client_id=' + settings.SALESFORCE_CONSUMER_KEY + '&redirect_uri=' + settings.SALESFORCE_REDIRECT_URI + '&scope=api&code_challenge=' + code_challenge + '&code_challenge_method=S256&state='+ state_uuid
             
             return HttpResponseRedirect(oauth_url)
     else:
@@ -50,39 +53,47 @@ def oauth_response(request):
     if request.GET:
 
         oauth_code = request.GET.get('code')
-        environment = request.GET.get('state')
-        access_token = ''
-        instance_url = ''
-        org_id = ''
+        state_uuid = request.GET.get('state')
 
-        if 'Production' in environment:
-            login_url = 'https://login.salesforce.com'
-        else:
-            login_url = 'https://test.salesforce.com'
-        
-        r = requests.post(login_url + '/services/oauth2/token', headers={ 'content-type':'application/x-www-form-urlencoded'}, data={'grant_type':'authorization_code','client_id': settings.SALESFORCE_CONSUMER_KEY,'client_secret':settings.SALESFORCE_CONSUMER_SECRET,'redirect_uri': settings.SALESFORCE_REDIRECT_URI,'code': oauth_code})
-        auth_response = json.loads(r.text)
+        environment, code_verifier = utils.retrieve_state_uuid(state_uuid)
 
-        if 'error_description' in auth_response:
+        if environment is None or code_verifier is None:
             error_exists = True
-            error_message = auth_response['error'] + ' - ' + auth_response['error_description']
+            error_message = 'Failed to retrieve PKCE code'
+
         else:
-            access_token = auth_response['access_token']
-            instance_url = auth_response['instance_url']
-            user_id = auth_response['id'][-18:]
-            org_id = auth_response['id'][:-19]
-            org_id = org_id[-18:]
+            access_token = ''
+            instance_url = ''
+            org_id = ''
 
-            # get username of the authenticated user
-            r = requests.get(instance_url + '/services/data/v' + str(settings.SALESFORCE_API_VERSION) + '.0/sobjects/User/' + user_id + '?fields=Username', headers={'Authorization': 'OAuth ' + access_token})
-            query_response = json.loads(r.text)
-            username = query_response['Username']
+            if 'Production' in environment:
+                login_url = 'https://login.salesforce.com'
+            else:
+                login_url = 'https://test.salesforce.com'
+            
+            r = requests.post(login_url + '/services/oauth2/token', headers={ 'content-type':'application/x-www-form-urlencoded'}, data={'grant_type':'authorization_code','client_id': settings.SALESFORCE_CONSUMER_KEY,'client_secret':settings.SALESFORCE_CONSUMER_SECRET,'redirect_uri': settings.SALESFORCE_REDIRECT_URI,'code': oauth_code})
+            auth_response = json.loads(r.text)
 
-            # get the org name of the authenticated user
-            r = requests.get(instance_url + '/services/data/v' + str(settings.SALESFORCE_API_VERSION) + '.0/sobjects/Organization/' + org_id + '?fields=Name', headers={'Authorization': 'OAuth ' + access_token})
-            org_name = json.loads(r.text)['Name']
+            if 'error_description' in auth_response:
+                error_exists = True
+                error_message = auth_response['error'] + ' - ' + auth_response['error_description']
+            else:
+                access_token = auth_response['access_token']
+                instance_url = auth_response['instance_url']
+                user_id = auth_response['id'][-18:]
+                org_id = auth_response['id'][:-19]
+                org_id = org_id[-18:]
 
-        login_form = LoginForm(initial={'environment': environment, 'access_token': access_token, 'instance_url': instance_url, 'org_id': org_id})    
+                # get username of the authenticated user
+                r = requests.get(instance_url + '/services/data/v' + str(settings.SALESFORCE_API_VERSION) + '.0/sobjects/User/' + user_id + '?fields=Username', headers={'Authorization': 'OAuth ' + access_token})
+                query_response = json.loads(r.text)
+                username = query_response['Username']
+
+                # get the org name of the authenticated user
+                r = requests.get(instance_url + '/services/data/v' + str(settings.SALESFORCE_API_VERSION) + '.0/sobjects/Organization/' + org_id + '?fields=Name', headers={'Authorization': 'OAuth ' + access_token})
+                org_name = json.loads(r.text)['Name']
+
+            login_form = LoginForm(initial={'environment': environment, 'access_token': access_token, 'instance_url': instance_url, 'org_id': org_id})    
 
     # Run after user selects logout or get schema
     if request.POST:
