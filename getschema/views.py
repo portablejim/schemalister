@@ -42,6 +42,15 @@ def index(request):
 
     return render(request, 'index.html', {'login_form': login_form})
 
+def oauth_login(request):
+    pass
+
+def oauth_callback(request):
+    pass
+
+def configure(request):
+    pass
+
 def oauth_response(request):
 
     error_exists = False

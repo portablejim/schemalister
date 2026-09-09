@@ -7,7 +7,10 @@ from getschema import views
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', views.index, name='index'),
+    path('auth/login', views.oauth_login, name='oauth_login'),
+    path('auth/callback', views.oauth_callback, name='oauth_callback'),
     path('oauth_response/', views.oauth_response, name='oauth_response'),
+    path('configure', views.configure, name='configure'),
     path('schema/<str:schema_id>/', views.view_schema, name='view_schema'),
     path('export/<str:schema_id>/', views.export, name='export'),
     path('logout/', views.logout, name='logout'),
