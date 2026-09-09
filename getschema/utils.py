@@ -19,21 +19,8 @@ def get_headers_for_schema(schema):
     }
 
 
-# From https://stackoverflow.com/questions/79218688/authorization-code-with-pkce-returning-invalid-code-verifier
-def validate_code_verifier(received_verifier, original_challenge):
-    # Recalculate the code_challenge from the received code_verifier
-    recalculated_challenge = base64.urlsafe_b64encode(
-        hashlib.sha256(received_verifier.encode('utf-8')).digest()
-    ).decode('utf-8').rstrip('=')
-    
-    # Compare the recalculated challenge with the original challenge
-    if recalculated_challenge == original_challenge:
-        return True
-    else:
-        return False
-
-
 # PKCE: Generate code_verifier and code_challenge
+# From https://stackoverflow.com/questions/79218688/authorization-code-with-pkce-returning-invalid-code-verifier
 def generate_pkce_pair():
     code_verifier = secrets.token_urlsafe(64)  # Create a secure random string
     code_challenge = base64.urlsafe_b64encode(
