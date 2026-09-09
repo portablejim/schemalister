@@ -19,13 +19,35 @@ def get_headers_for_schema(schema):
     }
 
 
+# From https://stackoverflow.com/questions/79218688/authorization-code-with-pkce-returning-invalid-code-verifier
+def validate_code_verifier(received_verifier, original_challenge):
+    # Recalculate the code_challenge from the received code_verifier
+    recalculated_challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(received_verifier.encode('utf-8')).digest()
+    ).decode('utf-8').rstrip('=')
+    
+    # Compare the recalculated challenge with the original challenge
+    if recalculated_challenge == original_challenge:
+        return True
+    else:
+        return False
+
+
+# PKCE: Generate code_verifier and code_challenge
+def generate_pkce_pair():
+    code_verifier = secrets.token_urlsafe(64)  # Create a secure random string
+    code_challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(code_verifier.encode('utf-8')).digest()
+    ).decode('utf-8').rstrip('=')
+    return code_verifier, code_challenge
+
+
 def generate_state_uuid(environment):
     target_uuid = uuid.uuid4().hex
-    code_verifier = base64.b64encode(secrets.token_bytes(64)).decode('utf-8')
-    code_challenge = hashlib.sha256(code_verifier.encode('utf-8')).hexdigest()
+    code_verifier, code_challenge = generate_pkce_pair()
     
     r = redis.from_url(settings.REDIS_URL)
-    r.hsetex(target_uuid, mapping={
+    r.hsetex('login-' + target_uuid, mapping={
         'environment': environment,
         'code_verifier': code_verifier,
         'code_challenge': code_challenge
@@ -40,9 +62,9 @@ def retrieve_state_uuid(target_uuid):
         return None, None
 
     r = redis.from_url(settings.REDIS_URL)
-    state_uuid = r.hgetall(target_uuid)
-    if state_uuid is not None and 'environment' in state_uuid and 'code_verifier' in state_uuid:
-        return state_uuid['environment'], state_uuid['code_verifier']
+    state_uuid = r.hgetall('login-' + target_uuid)
+    if state_uuid is not None and 'environment'.encode('utf-8') in state_uuid and 'code_verifier'.encode('utf-8') in state_uuid:
+        return state_uuid['environment'.encode('utf-8')].decode('utf-8'), state_uuid['code_verifier'.encode('utf-8')].decode('utf-8')
 
     return None, None
 

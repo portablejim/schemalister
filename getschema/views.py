@@ -57,21 +57,21 @@ def oauth_response(request):
 
         environment, code_verifier = utils.retrieve_state_uuid(state_uuid)
 
+        access_token = ''
+        instance_url = ''
+        org_id = ''
+
         if environment is None or code_verifier is None:
             error_exists = True
             error_message = 'Failed to retrieve PKCE code'
 
         else:
-            access_token = ''
-            instance_url = ''
-            org_id = ''
-
             if 'Production' in environment:
                 login_url = 'https://login.salesforce.com'
             else:
                 login_url = 'https://test.salesforce.com'
             
-            r = requests.post(login_url + '/services/oauth2/token', headers={ 'content-type':'application/x-www-form-urlencoded'}, data={'grant_type':'authorization_code','client_id': settings.SALESFORCE_CONSUMER_KEY,'client_secret':settings.SALESFORCE_CONSUMER_SECRET,'redirect_uri': settings.SALESFORCE_REDIRECT_URI,'code': oauth_code})
+            r = requests.post(login_url + '/services/oauth2/token', headers={ 'content-type':'application/x-www-form-urlencoded'}, data={'grant_type':'authorization_code','client_id': settings.SALESFORCE_CONSUMER_KEY,'client_secret':settings.SALESFORCE_CONSUMER_SECRET,'redirect_uri': settings.SALESFORCE_REDIRECT_URI,'code': oauth_code,'code_verifier':code_verifier})
             auth_response = json.loads(r.text)
 
             if 'error_description' in auth_response:
@@ -93,7 +93,7 @@ def oauth_response(request):
                 r = requests.get(instance_url + '/services/data/v' + str(settings.SALESFORCE_API_VERSION) + '.0/sobjects/Organization/' + org_id + '?fields=Name', headers={'Authorization': 'OAuth ' + access_token})
                 org_name = json.loads(r.text)['Name']
 
-            login_form = LoginForm(initial={'environment': environment, 'access_token': access_token, 'instance_url': instance_url, 'org_id': org_id})    
+        login_form = LoginForm(initial={'environment': environment, 'access_token': access_token, 'instance_url': instance_url, 'org_id': org_id})    
 
     # Run after user selects logout or get schema
     if request.POST:
