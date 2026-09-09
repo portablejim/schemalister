@@ -13,6 +13,11 @@ env = environ.Env(
     SALESFORCE_CONSUMER_SECRET=(str, ''),
     SALESFORCE_API_VERSION=(int, 65),
     SALESFORCE_REDIRECT_URI=(str, ''),
+    PGDATABASE=(str, ''),
+    PGUSER=(str, ''),
+    PGPASSWORD=(str, ''),
+    PGHOST=(str, ''),
+    PGPORT=(str, ''),
 )
 environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
