@@ -1,7 +1,7 @@
 [project]
 name = "schemalister"
 version = "0.1.0"
-description = "Add your description here"
+description = "This tool uses the Salesforce Metadata API to build a list of objects, fields and field attributes from within your Salesforce Org."
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
