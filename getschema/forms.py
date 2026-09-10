@@ -8,3 +8,7 @@ class LoginForm(forms.Form):
 	org_id = forms.CharField(required=False)
 	include_field_usage = forms.BooleanField(required=False)
 	include_managed_objects = forms.BooleanField(required=False)
+
+class SubmitSchemaForm(forms.Form):
+	include_field_usage = forms.BooleanField(required=False)
+	include_managed_objects = forms.BooleanField(required=False)

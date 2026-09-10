@@ -1,9 +1,12 @@
-from django.shortcuts import render, get_object_or_404
+from urllib.parse import urlencode
+
+from django.shortcuts import redirect, render, get_object_or_404
 from django.http import HttpResponse, HttpResponseRedirect
+from django.urls import reverse
 from django.views.decorators.csrf import csrf_exempt
 from getschema import utils
 from getschema.models import Schema
-from getschema.forms import LoginForm
+from getschema.forms import LoginForm, SubmitSchemaForm
 from django.conf import settings
 from getschema.tasks import get_objects_and_fields
 import json    
@@ -20,6 +23,14 @@ logger = logging.getLogger(__name__)
 
 def index(request):
     
+    messages = []
+    if request.GET and 'error_message' in request.GET:
+        messages.append([request.GET['error_message']])
+    login_form = LoginForm()
+
+    return render(request, 'index.html', {'login_form': login_form, 'messages': messages})
+
+def oauth_login(request):
     if request.method == 'POST':
 
         login_form = LoginForm(request.POST)
@@ -37,19 +48,188 @@ def index(request):
             oauth_url = oauth_url + '?response_type=code&client_id=' + settings.SALESFORCE_CONSUMER_KEY + '&redirect_uri=' + settings.SALESFORCE_REDIRECT_URI + '&scope=api&code_challenge=' + code_challenge + '&code_challenge_method=S256&state='+ state_uuid
             
             return HttpResponseRedirect(oauth_url)
-    else:
-        login_form = LoginForm()
-
-    return render(request, 'index.html', {'login_form': login_form})
-
-def oauth_login(request):
-    pass
+    return HttpResponseRedirect('/')
 
 def oauth_callback(request):
-    pass
+    if request.GET:
+
+        oauth_code = request.GET.get('code')
+        state_uuid = request.GET.get('state')
+
+        environment, code_verifier = utils.retrieve_state_uuid(state_uuid)
+
+        access_token = ''
+        instance_url = ''
+        org_id = ''
+
+        if environment is None or code_verifier is None:
+            return redirect(reverse('index') + '?' + urlencode({ 'error_message':  'Failed to retrieve PKCE code' }))
+
+        else:
+            if 'Production' in environment:
+                login_url = 'https://login.salesforce.com'
+            else:
+                login_url = 'https://test.salesforce.com'
+            
+            r = requests.post(login_url + '/services/oauth2/token', headers={ 'content-type':'application/x-www-form-urlencoded'}, data={'grant_type':'authorization_code','client_id': settings.SALESFORCE_CONSUMER_KEY,'client_secret':settings.SALESFORCE_CONSUMER_SECRET,'redirect_uri': settings.SALESFORCE_REDIRECT_URI,'code': oauth_code,'code_verifier':code_verifier})
+            auth_response = json.loads(r.text)
+            logger.info(auth_response)
+
+            if 'error_description' in auth_response:
+                return redirect(reverse('index') + '?' + urlencode({ 'error_message': auth_response['error'] + ' - ' + auth_response['error_description'] }))
+            else:
+                access_token = auth_response['access_token']
+                instance_url = auth_response['instance_url']
+                user_id = auth_response['id'][-18:]
+                org_id = auth_response['id'][:-19]
+                org_id = org_id[-18:]
+
+                request.session['access_token'] = utils.encrypt_str(access_token)
+                request.session['instance_url'] = instance_url
+                request.session['user_id'] = user_id
+                request.session['org_id'] = org_id
+                request.session['issued_at'] = auth_response['issued_at']
+
+                return redirect('initialise')
+    return redirect(reverse('index') + '?' + urlencode({ 'error_message': 'Error with login callback' }))
+
+
+def initialise(request):
+    error_exists = False
+    error_message = ''
+    username = ''
+    org_name = ''
+    login_form = LoginForm()
+
+    if 'access_token' not in request.session or 'instance_url' not in request.session or 'user_id' not in request.session or 'org_id' not in request.session:
+        return redirect(reverse('index') + '?' + urlencode({ 'error_message':  'You are not logged in, or information has expired' }))
+
+    instance_url = request.session['instance_url']
+    access_token = utils.decrypt_str(request.session['access_token'])
+    user_id = request.session['user_id']
+    org_id = request.session['org_id']
+
+    error_exists = True
+    error_message = 'Testing'
+
+    r = requests.get(instance_url + '/services/data', headers={'Authorization': 'OAuth ' + access_token})
+    versions_list = r.json()
+    latest_version = None
+    for candidate_version in versions_list:
+        if 'version' in candidate_version:
+            if candidate_version['version'] != 'latest':
+                try:
+                    version_int = int(candidate_version['version'].split('.')[0])
+                    if latest_version is None or int(latest_version.split('.')[0]) < version_int:
+                        latest_version = candidate_version['version']
+                except ValueError:
+                    logger.info('Version is not a number: ' + candidate_version['version'])
+        else:
+            logger.info('Version does not exist on version: ' + json.dumps(candidate_version['version']))
+    request.session['latest_version'] = latest_version
+
+    api_version = latest_version
+    if api_version is None:
+        api_version = str(settings.SALESFORCE_API_VERSION) + '.0'
+
+    # get username of the authenticated user
+    r = requests.get(instance_url + '/services/data/v' +  api_version + '/sobjects/User/' + user_id + '?fields=Username', headers={'Authorization': 'OAuth ' + access_token})
+    query_response = json.loads(r.text)
+    username = query_response['Username']
+
+    # get the org name of the authenticated user
+    r = requests.get(instance_url + '/services/data/v' +  api_version + '/sobjects/Organization/' + org_id + '?fields=Name', headers={'Authorization': 'OAuth ' + access_token})
+    org_name = json.loads(r.text)['Name']
+
+    request.session['username'] = username
+    request.session['org_name'] = org_name
+
+    return redirect('configure')
 
 def configure(request):
-    pass
+    if 'access_token' not in request.session or 'instance_url' not in request.session or 'user_id' not in request.session or 'org_id' not in request.session:
+        return redirect(reverse('index') + '?' + urlencode({ 'error_message':  'You are not logged in, or information has expired' }))
+
+    if 'latest_version' not in request.session or 'username' not in request.session or 'org_name' not in request.session:
+        return redirect(reverse('initialise'))
+
+    if request.method == 'GET':
+        error_exists = False
+        error_message = ''
+        username = request.session['username']
+        org_name = request.session['org_name']
+        login_form = LoginForm()
+        submit_schema_form = SubmitSchemaForm()
+
+        error_exists = True
+        error_message = 'Testing 2'
+
+
+        return render(
+            request, 
+            'configure.html',
+            {
+                'error': error_exists, 
+                'error_message': error_message, 
+                'username': username, 
+                'org_name': org_name, 
+                'schema_form': submit_schema_form
+            }
+        )
+
+    elif request.method == 'POST':
+        instance_url = request.session['instance_url']
+        org_id = request.session['org_id']
+        org_name = request.session['org_name']
+        latest_version = request.session['latest_version']
+
+        if not request.POST:
+            return redirect('configure')
+        submit_schema_form = SubmitSchemaForm(request.POST)
+        if not submit_schema_form.is_valid():
+            return redirect('configure')
+
+        if 'logout' in request.POST:
+            return HttpResponseRedirect('logout')
+
+        if 'get_schema' in request.POST:
+            # Create schema record
+            schema = Schema()
+            schema.random_id = uuid.uuid4()
+            schema.created_date = timezone.now()
+            schema.api_version = latest_version
+            schema.org_id = org_id
+            schema.org_name = org_name
+            schema.access_token = request.session['access_token']
+            schema.instance_url = instance_url
+            schema.include_field_usage = submit_schema_form.cleaned_data['include_field_usage']
+            schema.include_managed_objects = submit_schema_form.cleaned_data['include_managed_objects']
+            schema.save()
+
+            # Queue job to run async
+            try:
+                logger.info("Starting async job to query objects and schema")
+                get_objects_and_fields.delay(schema.id)
+            except Exception as ex:
+                logger.error("Error triggering async job: " + str(ex))
+                logger.info("Retrying async job")
+                # If fail above, wait 5 seconds and try again. Not ideal but should work for now
+                sleep(5)
+                try:
+                    get_objects_and_fields.delay(schema.id)
+                except Exception as error:
+                    logger.error("Error triggering async job: " + str(error))
+                    schema.status = 'Error'
+                    schema.error = error
+                    schema.save()
+
+            return redirect('loading', schema_id=str(schema.random_id))
+
+        # Has not chosen an option, reload the page.
+        return redirect('configure')
+
+    return redirect(reverse('index') + '?' + urlencode({ 'error_message':  'configure fallthrough' }))
+
 
 def oauth_response(request):
 
@@ -363,9 +543,19 @@ def delete_schema(request, schema_id):
     return HttpResponse('Record deleted')
 
 def logout(request):
+    instance_url = request.session['instance_url']
+    instance_prefix = instance_url.replace('https://','').replace('.salesforce.com','')
+    access_token = utils.decrypt_str(request.session['access_token'])
 
-    # Determine logout url based on environment
-    instance_prefix = request.GET.get('instance_prefix')
+    request.session['access_token'] = None
+    request.session['instance_url'] = None
+    request.session['user_id'] = None
+    request.session['org_id'] = None
+    request.session['issued_at'] = None
+    request.session['username'] = None
+    request.session['org_name'] = None
+    request.session['latest_version'] = None
+    r = requests.post(instance_url + '/services/oauth2/revoke', headers={'content-type':'application/x-www-form-urlencoded'}, data={'token': access_token})
         
     return render(
         request, 

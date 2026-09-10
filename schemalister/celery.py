@@ -18,4 +18,4 @@ app.autodiscover_tasks()
 
 # Set timezone and disable UTC if preferred
 app.conf.enable_utc = False
-app.conf.timezone = 'Pacific/Auckland'
+app.conf.timezone = 'Australia/Sydney'

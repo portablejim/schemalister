@@ -7,6 +7,7 @@ class Schema(models.Model):
 	finished_date = models.DateTimeField(null=True,blank=True)
 	org_id = models.CharField(max_length=255)
 	org_name = models.CharField(max_length=255, blank=True)
+	api_version = models.TextField(blank=True)
 	username = models.CharField(max_length=255, blank=True)
 	access_token = models.CharField(max_length=255, blank=True)
 	instance_url = models.CharField(max_length=255, blank=True)

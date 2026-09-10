@@ -100,6 +100,17 @@ WSGI_APPLICATION = 'schemalister.wsgi.application'
 
 MAX_CONN_AGE = 600
 
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': env('REDIS_URL'),
+        'KEY_PREFIX': 'django-',
+        'OPTIONS': {
+            'TIMEOUT': 3600
+        }
+    }
+}
+
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',

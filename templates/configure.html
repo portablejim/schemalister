@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+
+{% load static %}
+
+{% block content %}
+
+	<div class="{% if request.GET.noheader == '1' %}col-md-12{% else %}col-md-6 col-md-offset-3{% endif %}">
+
+		<h1>Salesforce Schema Lister</h1>
+		<p>
+			This tool uses the Salesforce Metadata API to build a list of objects, fields and field attributes from within your Salesforce Org.
+		</p>
+		<p>
+			None of your organisation information or data is captured or kept from running this tool.
+		</p>
+
+		{% if messages %}
+			<div role="alert" class="alert alert-danger">
+				{% for message in messages %}
+					{{ message }}<br/>
+				{% endfor %}
+			</div>
+		{% endif %}
+					
+		<form action="" method="POST" id="loginForm"> {% csrf_token %}
+
+			<h2>Logged in as:</h2>
+			<table class="login_table">
+					<tr>
+						<td width="150">
+							<strong>Username:</strong>
+						</td>
+						<td>
+							{{ username }}
+						</td>
+					</tr>
+
+					<tr>
+						<td width="150">
+							<strong>Organisation:</strong>
+						</td>
+						<td>
+							{{ org_name }}
+						</td>
+					</tr>
+			</table>
+			<div>
+				<div class="checkbox">
+					<label>
+						{{ schema_form.include_managed_objects }} Include Managed Package Objects
+					</label>
+				</div>
+				<div class="checkbox">
+					<label>
+						{{ schema_form.include_field_usage }} Include field usage?
+					</label>
+					<p style="margin-left: 2em; margin-top: 0.5em;">
+						When this is checked, the Schema Lister will run queries to determine metadata where each field is used (eg. Workflows, Apex, Page Layouts etc). Takes substantially longer to run.
+					</p>
+				</div>
+				<div style="text-align:center;height:50px;">
+							<input type="submit" name="logout" value="Logout" onclick="showLogout();" oncomplete="hideLogout();" />
+							<input type="submit" name="get_schema" value="Get Schema" onclick="hideTable();" oncomplete="showTable();" />
+				</div>
+			</div>
+
+			<div class="loading">
+				<div style="float:left;">
+					<img src="{% static 'images/loading.gif' %}" alt="Loading" title="Loading" />
+				</div>
+				<div style="float:left;margin-left:20px;">
+					<h1 style="font-size:1.5em;margin-top:20px;">Querying objects and fields...</h1>
+					<p>This can take a few minutes.</p>
+				</div>
+			</div>
+
+			<div class="logging_out">
+				<div style="float:left;">
+					<img src="{% static 'images/loading.gif' %}" alt="Loading" title="Loading" />
+				</div>
+				<div style="float:left;margin-left:20px;">
+					<h1 style="font-size:1.5em;margin-top:20px;">Logging out...</h1>
+					<p>Revoking OAuth token.</p>
+				</div>
+			</div>
+		</form>
+	</div>
+
+{% endblock %}

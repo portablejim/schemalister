@@ -2,6 +2,7 @@ import base64
 import hashlib
 import secrets
 
+from cryptography.fernet import Fernet
 from django.conf import settings
 
 from .models import FieldUsage
@@ -54,6 +55,16 @@ def retrieve_state_uuid(target_uuid):
         return state_uuid['environment'.encode('utf-8')].decode('utf-8'), state_uuid['code_verifier'.encode('utf-8')].decode('utf-8')
 
     return None, None
+
+def encrypt_str(plain_str: str):
+    f = Fernet(settings.SECRETS_ENCRYPTION_KEY)
+    encrypted = f.encrypt(plain_str.encode('utf-8'))
+    return encrypted.decode('utf-8')
+
+def decrypt_str(encrypted_str: str):
+    f = Fernet(settings.SECRETS_ENCRYPTION_KEY)
+    decrypted = f.decrypt(encrypted_str.encode('utf-8'))
+    return decrypted.decode('utf-8')
 
 
 def get_urls_for_object(schema, object_name):

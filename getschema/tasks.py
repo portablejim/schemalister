@@ -1,4 +1,6 @@
 from __future__ import absolute_import
+import json
+import logging
 from django.conf import settings
 from django.utils import timezone
 import traceback
@@ -22,7 +24,10 @@ def get_objects_and_fields(schema_id):
 
     schema = Schema.objects.get(pk=schema_id)
     instance_url = schema.instance_url
-    access_token = schema.access_token
+    access_token = utils.decrypt_str(schema.access_token)
+    api_version = schema.api_version
+    if api_version is None or len(api_version) < 1:
+        api_version = str(settings.SALESFORCE_API_VERSION) + '.0'
 
     # Update to running
     schema.status = 'Running'
@@ -38,7 +43,7 @@ def get_objects_and_fields(schema_id):
 
     # Describe all sObjects
     all_objects = requests.get(
-        instance_url + '/services/data/v%s.0/sobjects/' % settings.SALESFORCE_API_VERSION, 
+        instance_url + '/services/data/v%s/sobjects/' % api_version, 
         headers=headers
     )
 
