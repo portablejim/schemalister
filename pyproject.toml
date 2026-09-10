@@ -11,6 +11,7 @@ dependencies = [
     "django-celery-beat>=2.1.0",
     "django-environ",
     "gunicorn>=26.2.0",
+    "pyjwt>=2.13.0",
     "python-dotenv==1.2.3",
     "redis==8.1.0",
     "requests==2.34.2",
