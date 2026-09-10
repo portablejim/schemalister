@@ -2,6 +2,7 @@ import os
 import environ
 from pathlib import Path
 import sys
+from urllib.parse import urlsplit
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -13,11 +14,11 @@ env = environ.Env(
     SALESFORCE_CONSUMER_SECRET=(str, ''),
     SALESFORCE_API_VERSION=(int, 65),
     SALESFORCE_REDIRECT_URI=(str, ''),
-    PGDATABASE=(str, ''),
-    PGUSER=(str, ''),
-    PGPASSWORD=(str, ''),
-    PGHOST=(str, ''),
-    PGPORT=(str, ''),
+    PGDATABASE=(str, None),
+    PGUSER=(str, None),
+    PGPASSWORD=(str, None),
+    PGHOST=(str, None),
+    PGPORT=(str, None),
     LANGUAGE_CODE=(str, 'en-au'),
     TIME_ZONE=(str, 'Australia/Sydney'),
 )
@@ -106,8 +107,28 @@ DATABASES = {
     }
 }
 
+ENABLE_POSTGRES = False
+if 'DATABASE_URL' in env and env('DATABASE_URL') is not None and len(env('DATABASE_URL')) > 0:
+    parsed_db_url = urlsplit(env('DATABASE_URL'))
+    if parsed_db_url.scheme == 'postgres':
+        ENABLE_POSTGRES = True
+        env["PGDATABASE"] = parsed_db_url.path[1:]
+        env["PGUSER"] = parsed_db_url.username
+        env["PGPASSWORD"] = parsed_db_url.password
+        env["PGHOST"] = parsed_db_url.hostname
+        env["PGPORT"] = parsed_db_url.port
+    if parsed_db_url.scheme == 'sqlite':
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.db.backends.sqlite3',
+                'NAME': BASE_DIR / parsed_db_url.path,
+            }
+        }
+
+
+
 # For running on server
-if not IS_LOCAL:
+if not IS_LOCAL or ENABLE_POSTGRES:
     # Configure Django for DATABASE_URL environment variable.
     DATABASES["default"] = {
         'ENGINE': 'django.db.backends.postgresql',
