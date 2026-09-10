@@ -150,7 +150,6 @@ if not IS_LOCAL or ENABLE_POSTGRES:
         'HOST': env("PGHOST"),
         'PORT': env("PGPORT"),
     }
-    print(DATABASES)
 
 STORAGES = {
     "staticfiles": {
