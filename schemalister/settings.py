@@ -124,11 +124,11 @@ if 'DATABASE_URL' in env and env('DATABASE_URL') is not None and len(env('DATABA
     parsed_db_url = urlsplit(env('DATABASE_URL'))
     if parsed_db_url.scheme == 'postgres':
         ENABLE_POSTGRES = True
-        env["PGDATABASE"] = parsed_db_url.path[1:]
-        env["PGUSER"] = parsed_db_url.username
-        env["PGPASSWORD"] = parsed_db_url.password
-        env["PGHOST"] = parsed_db_url.hostname
-        env["PGPORT"] = parsed_db_url.port
+        os.environ["PGDATABASE"] = parsed_db_url.path[1:]
+        os.environ["PGUSER"] = parsed_db_url.username
+        os.environ["PGPASSWORD"] = parsed_db_url.password
+        os.environ["PGHOST"] = parsed_db_url.hostname
+        os.environ["PGPORT"] = str(parsed_db_url.port)
     if parsed_db_url.scheme == 'sqlite':
         DATABASES = {
             'default': {
@@ -150,6 +150,7 @@ if not IS_LOCAL or ENABLE_POSTGRES:
         'HOST': env("PGHOST"),
         'PORT': env("PGPORT"),
     }
+    print(DATABASES)
 
 STORAGES = {
     "staticfiles": {
