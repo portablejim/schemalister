@@ -98,11 +98,8 @@ def oauth_callback(request):
 
 
 def initialise(request):
-    error_exists = False
-    error_message = ''
     username = ''
     org_name = ''
-    login_form = LoginForm()
 
     if 'access_token' not in request.session or 'instance_url' not in request.session or 'user_id' not in request.session or 'org_id' not in request.session:
         return redirect(reverse('index') + '?' + urlencode({ 'error_message':  'You are not logged in, or information has expired' }))
@@ -111,9 +108,6 @@ def initialise(request):
     access_token = utils.decrypt_str(request.session['access_token'])
     user_id = request.session['user_id']
     org_id = request.session['org_id']
-
-    error_exists = True
-    error_message = 'Testing'
 
     r = requests.get(instance_url + '/services/data', headers={'Authorization': 'OAuth ' + access_token})
     versions_list = r.json()
@@ -161,7 +155,6 @@ def configure(request):
         error_message = ''
         username = request.session['username']
         org_name = request.session['org_name']
-        login_form = LoginForm()
         submit_schema_form = SubmitSchemaForm()
 
         error_exists = True
@@ -232,122 +225,6 @@ def configure(request):
         return redirect('configure')
 
     return redirect(reverse('index') + '?' + urlencode({ 'error_message':  'configure fallthrough' }))
-
-
-def oauth_response(request):
-
-    error_exists = False
-    error_message = ''
-    username = ''
-    org_name = ''
-
-    # On page load
-    if request.GET:
-
-        oauth_code = request.GET.get('code')
-        state_uuid = request.GET.get('state')
-
-        environment, code_verifier = utils.retrieve_state_uuid(state_uuid)
-
-        access_token = ''
-        instance_url = ''
-        org_id = ''
-
-        if environment is None or code_verifier is None:
-            error_exists = True
-            error_message = 'Failed to retrieve PKCE code'
-
-        else:
-            if 'Production' in environment:
-                login_url = 'https://login.salesforce.com'
-            else:
-                login_url = 'https://test.salesforce.com'
-            
-            r = requests.post(login_url + '/services/oauth2/token', headers={ 'content-type':'application/x-www-form-urlencoded'}, data={'grant_type':'authorization_code','client_id': settings.SALESFORCE_CONSUMER_KEY,'client_secret':settings.SALESFORCE_CONSUMER_SECRET,'redirect_uri': settings.SALESFORCE_REDIRECT_URI,'code': oauth_code,'code_verifier':code_verifier})
-            auth_response = json.loads(r.text)
-
-            if 'error_description' in auth_response:
-                error_exists = True
-                error_message = auth_response['error'] + ' - ' + auth_response['error_description']
-            else:
-                access_token = auth_response['access_token']
-                instance_url = auth_response['instance_url']
-                user_id = auth_response['id'][-18:]
-                org_id = auth_response['id'][:-19]
-                org_id = org_id[-18:]
-
-                # get username of the authenticated user
-                r = requests.get(instance_url + '/services/data/v' + str(settings.SALESFORCE_API_VERSION) + '.0/sobjects/User/' + user_id + '?fields=Username', headers={'Authorization': 'OAuth ' + access_token})
-                query_response = json.loads(r.text)
-                username = query_response['Username']
-
-                # get the org name of the authenticated user
-                r = requests.get(instance_url + '/services/data/v' + str(settings.SALESFORCE_API_VERSION) + '.0/sobjects/Organization/' + org_id + '?fields=Name', headers={'Authorization': 'OAuth ' + access_token})
-                org_name = json.loads(r.text)['Name']
-
-        login_form = LoginForm(initial={'environment': environment, 'access_token': access_token, 'instance_url': instance_url, 'org_id': org_id})    
-
-    # Run after user selects logout or get schema
-    if request.POST:
-
-        login_form = LoginForm(request.POST)
-
-        if login_form.is_valid():
-
-            environment = login_form.cleaned_data['environment']
-            access_token = login_form.cleaned_data['access_token']
-            instance_url = login_form.cleaned_data['instance_url']
-            org_id = login_form.cleaned_data['org_id']
-
-            if 'logout' in request.POST:
-
-                r = requests.post(instance_url + '/services/oauth2/revoke', headers={'content-type':'application/x-www-form-urlencoded'}, data={'token': access_token})
-                return HttpResponseRedirect('/logout?instance_prefix=' + instance_url.replace('https://','').replace('.salesforce.com',''))
-
-            if 'get_schema' in request.POST:
-
-                # Create schema record
-                schema = Schema()
-                schema.random_id = uuid.uuid4()
-                schema.created_date = timezone.now()
-                schema.org_id = org_id
-                schema.org_name = org_name
-                schema.access_token = access_token
-                schema.instance_url = instance_url
-                schema.include_field_usage = login_form.cleaned_data['include_field_usage']
-                schema.include_managed_objects = login_form.cleaned_data['include_managed_objects']
-                schema.save()
-
-                # Queue job to run async
-                try:
-                    logger.info("Starting async job to query objects and schema")
-                    get_objects_and_fields.delay(schema.id)
-                except Exception as ex:
-                    logger.error("Error triggering async job: " + str(ex))
-                    logger.info("Retrying async job")
-                    # If fail above, wait 5 seconds and try again. Not ideal but should work for now
-                    sleep(5)
-                    try:
-                        get_objects_and_fields.delay(schema.id)
-                    except Exception as error:
-                        logger.error("Error triggering async job: " + str(error))
-                        schema.status = 'Error'
-                        schema.error = error
-                        schema.save()
-
-                return HttpResponseRedirect('/loading/' + str(schema.random_id))
-
-    return render(
-        request, 
-        'oauth_response.html',
-        {
-            'error': error_exists, 
-            'error_message': error_message, 
-            'username': username, 
-            'org_name': org_name, 
-            'login_form': login_form
-        }
-    )
 
 # AJAX endpoint for page to constantly check if job is finished
 def job_status(request, schema_id):
