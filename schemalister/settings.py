@@ -18,6 +18,8 @@ env = environ.Env(
     PGPASSWORD=(str, ''),
     PGHOST=(str, ''),
     PGPORT=(str, ''),
+    LANGUAGE_CODE=(str, 'en-au'),
+    TIME_ZONE=(str, 'Australia/Sydney'),
 )
 environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
@@ -128,8 +130,8 @@ CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
 # Internationalization
 # https://docs.djangoproject.com/en/1.6/topics/i18n/
-LANGUAGE_CODE = 'en-nz'
-TIME_ZONE = 'Pacific/Auckland'
+LANGUAGE_CODE = env('LANGUAGE_CODE')
+TIME_ZONE = env('TIME_ZONE')
 USE_I18N = True
 USE_TZ = True
 
