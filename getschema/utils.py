@@ -2,7 +2,7 @@ import base64
 import hashlib
 import secrets
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 from django.conf import settings
 
 from .models import FieldUsage
@@ -57,14 +57,26 @@ def retrieve_state_uuid(target_uuid):
     return None, None
 
 def encrypt_str(plain_str: str):
-    f = Fernet(settings.SECRETS_ENCRYPTION_KEY)
-    encrypted = f.encrypt(plain_str.encode('utf-8'))
-    return encrypted.decode('utf-8')
+    if plain_str is None:
+        return None
+    try:
+        f = Fernet(settings.SECRETS_ENCRYPTION_KEY)
+        encrypted = f.encrypt(plain_str.encode('utf-8'))
+        return encrypted.decode('utf-8')
+    except TypeError, UnicodeEncodeError, UnicodeDecodeError:
+        # Fail to just passing the value through.
+        return plain_str
 
 def decrypt_str(encrypted_str: str):
-    f = Fernet(settings.SECRETS_ENCRYPTION_KEY)
-    decrypted = f.decrypt(encrypted_str.encode('utf-8'))
-    return decrypted.decode('utf-8')
+    if encrypted_str is None:
+        return None
+    try:
+        f = Fernet(settings.SECRETS_ENCRYPTION_KEY)
+        decrypted = f.decrypt(encrypted_str.encode('utf-8'))
+        return decrypted.decode('utf-8')
+    except InvalidToken, TypeError, UnicodeEncodeError, UnicodeDecodeError:
+        # Fail to just passing the value through.
+        return encrypt_str
 
 
 def get_urls_for_object(schema, object_name):
