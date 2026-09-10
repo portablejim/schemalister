@@ -33,12 +33,16 @@
 			<br/><br/>
 			Also, please note the <strong>Description</strong> field isn't included in the REST API, so cannot be included in the report.
 		</div>
+		{% if packageid_production %}
 		<p>
-			<a href="https://login.salesforce.com/packaging/installPackage.apexp?p0=04tNS000000YWdNYAW">Install the package (Production)</a>
+			<a href="https://login.salesforce.com/packaging/installPackage.apexp?p0={{ packageid_production }}">Install the package (Production)</a>
 		</p>
+		{% endif %}
+		{% if packageid_sandbox %}
 		<p>
-			<a href="https://test.salesforce.com/packaging/installPackage.apexp?p0=04tNS000000YWdNYAW">Install the package (Sandbox)</a>
+			<a href="https://test.salesforce.com/packaging/installPackage.apexp?p0={{ packageid_production }}">Install the package (Sandbox)</a>
 		</p>
+		{% endif %}
 		
 		<form action="/auth/login" method="POST" onsubmit="hideTable();" oncomplete="showTable();" id="loginForm"> 
 

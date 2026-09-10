@@ -28,7 +28,10 @@ def index(request):
         messages.append([request.GET['error_message']])
     login_form = LoginForm()
 
-    return render(request, 'index.html', {'login_form': login_form, 'messages': messages})
+    packageid_production = settings.EXTERNAL_APP_PACKAGEID_PRODUCTION
+    packageid_sandbox = settings.EXTERNAL_APP_PACKAGEID_SANDBOX
+
+    return render(request, 'index.html', {'login_form': login_form, 'messages': messages, 'packageid_production': packageid_production, 'packageid_sandbox': packageid_sandbox})
 
 def oauth_login(request):
     if request.method == 'POST':
