@@ -35,7 +35,7 @@ def main():
             if missing_django_secret_key:
                 logging.critical('DJANGO_SECRET_KEY missing | Example: ' + get_random_secret_key())
             if missing_jwt_secret_key:
-                logging.critical('JWT_SECRET_KEY missing | Example: ' + secrets.token_hex(32).decode('utf-8'))
+                logging.critical('JWT_SECRET_KEY missing | Example: ' + secrets.token_hex(32))
             if missing_secrets_encryption_key:
                 logging.critical('SECRETS_ENCRYPTION_KEY missing | Example: ' + Fernet.generate_key().decode('utf-8'))
             exit(1)
