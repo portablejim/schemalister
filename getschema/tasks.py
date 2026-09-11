@@ -49,7 +49,7 @@ def get_objects_and_fields(schema_id):
 
     try:
 
-        if 'sobjects' in all_objects.json():
+        if all_objects.ok and 'sobjects' in all_objects.json():
 
             for sObject in all_objects.json()['sobjects']:
 
@@ -71,6 +71,9 @@ def get_objects_and_fields(schema_id):
 
                     # query for fields in the object
                     object_describe = requests.get(instance_url + sObject['urls']['describe'], headers={'Authorization': 'Bearer ' + access_token, 'content-type': 'application/json'})
+
+                    if settings.DEBUG and not object_describe.ok:
+                        print('ERR:object_describe:' + new_object.label + '|' + str(object_describe.status_code) + '|' + object_describe.reason)
 
                     # Loop through fields
                     for field in object_describe.json()['fields']:
@@ -214,6 +217,14 @@ def get_objects_and_fields(schema_id):
 
             else:
                 schema.status = 'Finished'
+
+        elif not all_objects.ok:
+            schema.status = 'Error'
+            schema.error = 'Error running query. The token has probably expired'
+
+            debug = Debug()
+            debug.debug = str(all_objects.status_code) + '|' + all_objects.reason + '|' + all_objects.text
+            debug.save()
 
         else:
 

@@ -163,6 +163,12 @@ def configure(request):
     if 'latest_version' not in request.session or 'username' not in request.session or 'org_name' not in request.session:
         return redirect(reverse('initialise'))
 
+    instance_url = request.session['instance_url']
+    access_token = utils.decrypt_str(request.session['access_token'])
+    r = requests.get(instance_url + '/services/data', headers={'Authorization': 'OAuth ' + access_token})
+    if not r.ok:
+            return redirect('logout')
+
     if request.method == 'GET':
         error_exists = False
         error_message = ''
@@ -199,7 +205,7 @@ def configure(request):
             return redirect('configure')
 
         if 'logout' in request.POST:
-            return HttpResponseRedirect('logout')
+            return redirect('logout')
 
         if 'get_schema' in request.POST:
             # Create schema record

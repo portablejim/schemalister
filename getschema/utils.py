@@ -15,7 +15,7 @@ import redis
 
 def get_headers_for_schema(schema):
     return {
-        'Authorization': 'Bearer ' + schema.access_token, 
+        'Authorization': 'Bearer ' + decrypt_str(schema.access_token), 
         'Content-Type': 'application/json'
     }
 
@@ -94,9 +94,13 @@ def get_urls_for_object(schema, object_name):
         headers=get_headers_for_schema(schema)
     )
 
+    if not records.ok:
+        if settings.DEBUG:
+            print('ERR:get_urls_for_object:' + object_name + '|' + str(records.status_code) + '|' + records.reason)
+
     record_urls = []
 
-    if 'records' in records.json():
+    if records.ok and 'records' in records.json():
         # Iterate over the list of objects
         for record in records.json()['records']:
             record_url = schema.instance_url + record['attributes']['url']
@@ -116,23 +120,32 @@ def get_usage_for_component(all_fields, schema, component_name):
         # Get the metadata for the layout
         record_result = requests.get(url, headers=get_headers_for_schema(schema))
 
+        if not record_result.ok:
+            if settings.DEBUG:
+                print('ERR:get_url_for_object:' + component_name + '|' + str(record_result.status_code) + '|' + record_result.reason + '|' + url)
+            continue
+
         # Convert to json object
         record_json = record_result.json()
 
         if 'Name' in record_json and 'FullName' in record_json:
 
+            # Get all required values
+            full_name = record_json['FullName']
+            object_name = get_object_name(full_name, component_name, record_json)
+            record_string = get_record_string(record_json, component_name)
+
             # Iterate over each field to determine if it's included in a layout
             for field in all_fields:
-
-                # Get all required values
-                full_name = record_json['FullName']
-                object_name = get_object_name(full_name, component_name, record_json)
-                record_string = get_record_string(record_json, component_name)
                 field_name = get_field_name(field, component_name)
 
                 # See if the field exists in the metadata
                 if (field.object.api_name == object_name or not object_name) and field_name in record_string:
                     create_field_usage(field, component_name, record_json['Name'])
+        else:
+            if settings.DEBUG:
+                print('No full name: ' + url)
+                print(record_json)
 
 
 
