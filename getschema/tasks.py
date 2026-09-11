@@ -124,22 +124,56 @@ def get_objects_and_fields(schema_id):
                         managed_where_exclude = ''
                         if not schema.include_managed_objects:
                             managed_where_exclude = ' AND NamespacePrefix = NULL'
+
+                        # If the object is not mapped, try mapping it.
+                        if new_object.api_name not in entity_id_mapping:
+                            if new_object.api_name in standard_objects:
+                                entity_id_mapping[new_object.api_name] = new_object.api_name
+                            else:
+                                object_id_lookup_query = f"SELECT Id, DeveloperName, EntityDefinitionId FROM FieldDefinition WHERE DurableId = '{new_object.api_name}.Id'"
+                                object_id_lookup_ids_req = requests.get(
+                                    f"{instance_url}/services/data/v{api_version}/query/?q=" + urllib.parse.quote(object_id_lookup_query, safe=''),
+                                    headers=headers
+                                )
+                                if object_id_lookup_ids_req.ok and 'records' in object_id_lookup_ids_req.json() and len(object_id_lookup_ids_req.json()['records']) > 0:
+                                    target_lookup_record = object_id_lookup_ids_req.json()['records'][0]
+                                    if 'EntityDefinitionId' in target_lookup_record:
+                                        entity_id_mapping[new_object.api_name] = target_lookup_record['EntityDefinitionId']
+                                        print('second chance mapping object:' + new_object.api_name + ' => ' + target_lookup_record['EntityDefinitionId'])
+
                         if new_object.api_name in entity_id_mapping:
                             target_object_id = entity_id_mapping[new_object.api_name]
-                            object_descriptions_query = f"SELECT Id, Description, DeveloperName, EntityDefinitionId FROM CustomField WHERE EntityDefinitionId = '{target_object_id}' AND Description != NULL{managed_where_exclude}"
+                            object_descriptions_query = f"SELECT Id, Description, DeveloperName, EntityDefinitionId FROM FieldDefinition WHERE EntityDefinitionId = '{target_object_id}' AND Description != NULL"
                             object_descriptions_ids_req = requests.get(
-                                f"{instance_url}/services/data/v{api_version}/tooling/query/?q=" + urllib.parse.quote(object_descriptions_query, safe=''),
+                                f"{instance_url}/services/data/v{api_version}/query/?q=" + urllib.parse.quote(object_descriptions_query, safe=''),
                                 headers=headers
                             )
                             if object_descriptions_ids_req.ok and 'records' in object_descriptions_ids_req.json():
                                 for current_object_record in object_descriptions_ids_req.json()['records']:
                                     if 'Description' in current_object_record and 'DeveloperName' in current_object_record:
-                                        target_field_name = current_object_record['DeveloperName'] + '__c'
+                                        target_field_name = current_object_record['DeveloperName']
                                         field_description_map[target_field_name] = current_object_record['Description']
                                         if settings.DEBUG:
-                                            print(f"mapping field: {target_field_name} => {current_object_record['Description']}")
+                                            print(f"mapping field (standard): {target_field_name} => {current_object_record['Description']}")
                             elif settings.DEBUG and not object_descriptions_ids_req.ok:
                                 print('ERR:object_descriptions_query:' + target_object_id + '|' + str(target_object_ids_req.status_code) + '|' + target_object_ids_req.reason)
+
+                            object_descriptions_custom_query = f"SELECT Id, Description, DeveloperName, EntityDefinitionId, NamespacePrefix FROM CustomField WHERE EntityDefinitionId = '{target_object_id}' AND Description != NULL{managed_where_exclude}"
+                            object_descriptions_custom_ids_req = requests.get(
+                                f"{instance_url}/services/data/v{api_version}/tooling/query/?q=" + urllib.parse.quote(object_descriptions_custom_query, safe=''),
+                                headers=headers
+                            )
+                            if object_descriptions_custom_ids_req.ok and 'records' in object_descriptions_custom_ids_req.json():
+                                for current_object_record in object_descriptions_custom_ids_req.json()['records']:
+                                    if 'Description' in current_object_record and 'DeveloperName' in current_object_record:
+                                        target_field_name = current_object_record['DeveloperName'] + '__c'
+                                        if schema.include_managed_objects and 'NamespacePrefix' in current_object_record and current_object_record['NamespacePrefix'] is not None:
+                                            target_field_name = current_object_record['NamespacePrefix'] + '__' + current_object_record['DeveloperName'] + '__c'
+                                        field_description_map[target_field_name] = current_object_record['Description']
+                                        if settings.DEBUG:
+                                            print(f"mapping field (custom): {target_field_name} => {current_object_record['Description']}")
+                            elif settings.DEBUG and not object_descriptions_custom_ids_req.ok:
+                                print('ERR:object_descriptions_custom_query:' + target_object_id + '|' + str(object_descriptions_custom_ids_req.status_code) + '|' + object_descriptions_custom_ids_req.reason)
 
                     # query for fields in the object
                     object_describe = requests.get(instance_url + sObject['urls']['describe'], headers={'Authorization': 'Bearer ' + access_token, 'content-type': 'application/json'})
