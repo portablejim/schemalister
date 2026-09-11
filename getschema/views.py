@@ -59,6 +59,19 @@ def oauth_callback(request):
         oauth_code = request.GET.get('code')
         state_uuid = request.GET.get('state')
 
+        if 'error' in request.GET:
+            if request.GET['error'] == 'OAUTH_EC_APP_NOT_FOUND':
+                if settings.EXTERNAL_APP_PACKAGEID_PRODUCTION is None and settings.EXTERNAL_APP_PACKAGEID_SANDBOX is None:
+                    return redirect(reverse('index') + '?' + urlencode({ 'error_message':  'Please login to an organisation with the appropriate External Client App (ECA). Please contact the administrator of the server for more information.' }))
+                else:
+                    return redirect(reverse('index') + '?' + urlencode({ 'error_message':  'Please install the package in the org you are trying to login to.' }))
+            elif request.GET['error'] == 'OAUTH_APP_ACCESS_DENIED':
+                passed_error_message = ''
+                if 'error_message' in request.GET:
+                    passed_error_message = f" (error: {request.GET['error_message']})"
+                return redirect(reverse('index') + '?' + urlencode({ 'error_message':  'This user is blocked from accessing the app / access was denied.' + passed_error_message }))
+
+
         environment, code_verifier = utils.retrieve_state_uuid(state_uuid)
 
         access_token = ''
