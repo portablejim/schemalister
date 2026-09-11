@@ -35,12 +35,12 @@
 		</div>
 		{% if packageid_production %}
 		<p>
-			<a href="https://login.salesforce.com/packaging/installPackage.apexp?p0={{ packageid_production }}">Install the package (Production)</a>
+			<a href="https://login.salesforce.com/packaging/installPackage.apexp?p0={{ packageid_production }}" target="_blank">Install the package (Production)</a>
 		</p>
 		{% endif %}
 		{% if packageid_sandbox %}
 		<p>
-			<a href="https://test.salesforce.com/packaging/installPackage.apexp?p0={{ packageid_production }}">Install the package (Sandbox)</a>
+			<a href="https://test.salesforce.com/packaging/installPackage.apexp?p0={{ packageid_production }}" target="_blank">Install the package (Sandbox)</a>
 		</p>
 		{% endif %}
 		
