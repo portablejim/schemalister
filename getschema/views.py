@@ -25,7 +25,7 @@ def index(request):
     
     messages = []
     if request.GET and 'error_message' in request.GET:
-        messages.append([request.GET['error_message']])
+        messages.append(request.GET['error_message'])
     login_form = LoginForm()
 
     packageid_production = settings.EXTERNAL_APP_PACKAGEID_PRODUCTION
