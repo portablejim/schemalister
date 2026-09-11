@@ -18,5 +18,5 @@ urlpatterns = [
     path('loading/<str:schema_id>/', views.loading, name='loading'),
     path('delete_schema/<str:schema_id>/', views.delete_schema, name='delete_schema'),
     #path('delete_schemas/', views.delete_schemas, name='delete_schemas'),
-    path('auth_details/', views.auth_details),
+    #path('auth_details/', views.auth_details),
 ]
