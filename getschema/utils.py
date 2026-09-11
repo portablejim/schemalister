@@ -1,5 +1,6 @@
 import base64
 import hashlib
+import re
 import secrets
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -322,3 +323,10 @@ def write_usage_to_field(usage_display, usage_list, label, is_html):
 
     return usage_display
 
+
+# Combined pattern for 15 or 18 alphanumeric characters
+salesforce_id_pattern = re.compile(r"^[a-zA-Z0-9]{15}([a-zA-Z0-9]{3})?$")
+def is_valid_salesforce_id(sf_id):
+  if not sf_id:
+    return False
+  return bool(salesforce_id_pattern.match(sf_id))

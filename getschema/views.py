@@ -163,6 +163,9 @@ def configure(request):
     if 'latest_version' not in request.session or 'username' not in request.session or 'org_name' not in request.session:
         return redirect(reverse('initialise'))
 
+    if request.session['instance_url'] is None or len(request.session['instance_url']) == 0:
+        return redirect('logout')
+
     instance_url = request.session['instance_url']
     access_token = utils.decrypt_str(request.session['access_token'])
     r = requests.get(instance_url + '/services/data', headers={'Authorization': 'OAuth ' + access_token})
@@ -219,6 +222,7 @@ def configure(request):
             schema.instance_url = instance_url
             schema.include_field_usage = submit_schema_form.cleaned_data['include_field_usage']
             schema.include_managed_objects = submit_schema_form.cleaned_data['include_managed_objects']
+            schema.include_field_description = submit_schema_form.cleaned_data['include_field_description']
             schema.save()
 
             # Queue job to run async
@@ -346,17 +350,22 @@ def export(request, schema_id):
                 # Create sheet
                 sheet = book.add_worksheet(api_name_unique)    
 
-                # Write column headers
-                sheet.write(0, 0, 'Field Label', bold)
-                sheet.write(0, 1, 'API Name', bold)
-                sheet.write(0, 2, 'Type', bold)
-                sheet.write(0, 3, 'Help Text', bold)
-                sheet.write(0, 4, 'Formula', bold)
-                sheet.write(0, 5, 'Attributes', bold)
-
-                # If the usage needs to be included, add the columns
+                headings = []
+                headings.append('Field Label')
+                headings.append('API Name')
+                headings.append('Type')
+                headings.append('Help Text')
+                if schema.include_field_description:
+                    headings.append('Description')
+                headings.append('Formula')
+                headings.append('Attributes')
                 if schema.include_field_usage:
-                    sheet.write(0, 6, 'Field Usage', bold)
+                    # If the usage needs to be included, add the columns
+                    headings.append('Field Usage')
+
+                # Write column headers
+                for col_num in range(len(headings)):
+                    sheet.write(0, col_num, headings[col_num], bold)
 
                 # Iterate over fields in object
                 for index, field in enumerate(obj.sorted_fields()):
@@ -365,15 +374,20 @@ def export(request, schema_id):
                     row = index + 1
 
                     # Write fields to row
-                    sheet.write(row, 0, field.label)
-                    sheet.write(row, 1, field.api_name)
-                    sheet.write(row, 2, field.data_type)
-                    sheet.write(row, 3, field.help_text)
-                    sheet.write(row, 4, field.formula)
-                    sheet.write(row, 5, field.attributes)
-
+                    row_columns = []
+                    row_columns.append(field.label)
+                    row_columns.append(field.api_name)
+                    row_columns.append(field.data_type)
+                    row_columns.append(field.help_text)
+                    if schema.include_field_description:
+                        row_columns.append(field.description)
+                    row_columns.append(field.formula)
+                    row_columns.append(field.attributes)
                     if schema.include_field_usage:
-                        sheet.write(row, 6, field.field_usage_display_text)
+                        row_columns.append(field.field_usage_display_text)
+                    # Write fields to row
+                    for col_num in range(len(row_columns)):
+                        sheet.write(row, col_num, row_columns[col_num])
 
         # This puts all fields on the one worksheet
         else:
@@ -381,18 +395,23 @@ def export(request, schema_id):
             # Create sheet
             sheet = book.add_worksheet('Schema')   
 
-            # Write column headers
-            sheet.write(0, 0, 'Object', bold)
-            sheet.write(0, 1, 'Field Label', bold)
-            sheet.write(0, 2, 'API Name', bold)
-            sheet.write(0, 3, 'Type', bold)
-            sheet.write(0, 4, 'Help Text', bold)
-            sheet.write(0, 5, 'Formula', bold)
-            sheet.write(0, 6, 'Attributes', bold)
-
-            # If the usage needs to be included, add the columns
+            headings = []
+            headings.append('Object')
+            headings.append('Field Label')
+            headings.append('API Name')
+            headings.append('Type')
+            headings.append('Help Text')
+            if schema.include_field_description:
+                headings.append('Description')
+            headings.append('Formula')
+            headings.append('Attributes')
             if schema.include_field_usage:
-                sheet.write(0, 7, 'Field Usage', bold)
+                # If the usage needs to be included, add the columns
+                headings.append('Field Usage')
+
+            # Write column headers
+            for col_num in range(len(headings)):
+                sheet.write(0, col_num, headings[col_num], bold)
 
             # Set start row
             row = 1
@@ -404,16 +423,20 @@ def export(request, schema_id):
                 for index, field in enumerate(obj.sorted_fields()):
 
                     # Write fields to row
-                    sheet.write(row, 0, obj.api_name)
-                    sheet.write(row, 1, field.label)
-                    sheet.write(row, 2, field.api_name)
-                    sheet.write(row, 3, field.data_type)
-                    sheet.write(row, 4, field.help_text)
-                    sheet.write(row, 5, field.formula)
-                    sheet.write(row, 6, field.attributes)
-
+                    row_columns = []
+                    row_columns.append(obj.api_name)
+                    row_columns.append(field.label)
+                    row_columns.append(field.api_name)
+                    row_columns.append(field.data_type)
+                    row_columns.append(field.help_text)
+                    if schema.include_field_description:
+                        row_columns.append(field.description)
+                    row_columns.append(field.formula)
+                    row_columns.append(field.attributes)
                     if schema.include_field_usage:
-                        sheet.write(row, 7, field.field_usage_display_text)
+                        row_columns.append(field.field_usage_display_text)
+                    for col_num in range(len(row_columns)):
+                        sheet.write(row, col_num, row_columns[col_num])
 
                     row += 1
 
@@ -443,7 +466,9 @@ def delete_schema(request, schema_id):
 
 def logout(request):
     instance_url = request.session['instance_url']
-    instance_prefix = instance_url.replace('https://','').replace('.salesforce.com','')
+    instance_prefix = None
+    if instance_url is not None:
+        instance_prefix = instance_url.replace('https://','').replace('.salesforce.com','')
     access_token = utils.decrypt_str(request.session['access_token'])
 
     request.session['access_token'] = None
@@ -454,7 +479,8 @@ def logout(request):
     request.session['username'] = None
     request.session['org_name'] = None
     request.session['latest_version'] = None
-    r = requests.post(instance_url + '/services/oauth2/revoke', headers={'content-type':'application/x-www-form-urlencoded'}, data={'token': access_token})
+    if instance_url is not None and access_token is not None:
+        r = requests.post(instance_url + '/services/oauth2/revoke', headers={'content-type':'application/x-www-form-urlencoded'}, data={'token': access_token})
         
     return render(
         request, 

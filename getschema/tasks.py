@@ -4,6 +4,8 @@ import logging
 from django.conf import settings
 from django.utils import timezone
 import traceback
+
+import urllib
 from getschema.models import Schema, Object, Field, Debug, StandardObject
 from django.conf import settings
 from . import utils
@@ -47,6 +49,54 @@ def get_objects_and_fields(schema_id):
         headers=headers
     )
 
+    entity_id_mapping = {}
+    entity_id_mapping_rev = {}
+    if schema.include_field_description:
+        managed_where_exclude = ''
+        if not schema.include_managed_objects:
+            managed_where_exclude = ' AND NamespacePrefix = NULL'
+
+        description_object_query = f"SELECT EntityDefinitionId FROM CustomField WHERE NamespacePrefix = NULL AND Description != NULL{managed_where_exclude} GROUP BY EntityDefinitionId ORDER BY EntityDefinitionId"
+        description_object_ids_req = requests.get(
+            f"{instance_url}/services/data/v{api_version}/tooling/query/?q=" + urllib.parse.quote(description_object_query, safe=''),
+            headers=headers
+        )
+
+        entity_definition_id_list = []
+
+        if description_object_ids_req.ok:
+            description_object_ids = description_object_ids_req.json()
+            if 'records' in description_object_ids:
+                for current_row in description_object_ids['records']:
+                    if 'EntityDefinitionId' in current_row:
+                        entity_definition_id_list.append(current_row['EntityDefinitionId'])
+        elif settings.DEBUG:
+            print('ERR:description_object_query|' + str(description_object_ids_req.status_code) + '|' + description_object_ids_req.reason)
+
+        for entity_def_id in entity_definition_id_list:
+            if utils.is_valid_salesforce_id(entity_def_id):
+                # Valid ids need to be looked up.
+                target_object_query = f"SELECT Id, FullName FROM CustomField WHERE EntityDefinitionId = '{entity_def_id}'{managed_where_exclude} LIMIT 1"
+                target_object_ids_req = requests.get(
+                    f"{instance_url}/services/data/v{api_version}/tooling/query/?q=" + urllib.parse.quote(target_object_query, safe=''),
+                    headers=headers
+                )
+                if target_object_ids_req.ok and 'records' in target_object_ids_req.json() and len(target_object_ids_req.json()['records']) > 0:
+                    target_record = target_object_ids_req.json()['records'][0]
+                    if 'FullName' in target_record:
+                        target_object_name = target_record['FullName'].split('.')[0]
+                        entity_id_mapping[target_object_name] = entity_def_id
+                        entity_id_mapping_rev[entity_def_id] = target_object_name
+                        print('mapping object:' + target_object_name + ' => ' + entity_def_id)
+                elif settings.DEBUG:
+                    print('ERR:target_object_query:' + entity_def_id + '|' + str(target_object_ids_req.status_code) + '|' + target_object_ids_req.reason)
+
+
+            else:
+                # Non-Ids are probably already object names.
+                entity_id_mapping[entity_def_id] = entity_def_id
+                entity_id_mapping_rev[entity_def_id] = entity_def_id
+
     try:
 
         if all_objects.ok and 'sobjects' in all_objects.json():
@@ -68,6 +118,28 @@ def get_objects_and_fields(schema_id):
                     new_object.api_name = sObject['name']
                     new_object.label = sObject['label']
                     new_object.save()
+
+                    field_description_map = {}
+                    if schema.include_field_description:
+                        managed_where_exclude = ''
+                        if not schema.include_managed_objects:
+                            managed_where_exclude = ' AND NamespacePrefix = NULL'
+                        if new_object.api_name in entity_id_mapping:
+                            target_object_id = entity_id_mapping[new_object.api_name]
+                            object_descriptions_query = f"SELECT Id, Description, DeveloperName, EntityDefinitionId FROM CustomField WHERE EntityDefinitionId = '{target_object_id}' AND Description != NULL{managed_where_exclude}"
+                            object_descriptions_ids_req = requests.get(
+                                f"{instance_url}/services/data/v{api_version}/tooling/query/?q=" + urllib.parse.quote(object_descriptions_query, safe=''),
+                                headers=headers
+                            )
+                            if object_descriptions_ids_req.ok and 'records' in object_descriptions_ids_req.json():
+                                for current_object_record in object_descriptions_ids_req.json()['records']:
+                                    if 'Description' in current_object_record and 'DeveloperName' in current_object_record:
+                                        target_field_name = current_object_record['DeveloperName'] + '__c'
+                                        field_description_map[target_field_name] = current_object_record['Description']
+                                        if settings.DEBUG:
+                                            print(f"mapping field: {target_field_name} => {current_object_record['Description']}")
+                            elif settings.DEBUG and not object_descriptions_ids_req.ok:
+                                print('ERR:object_descriptions_query:' + target_object_id + '|' + str(target_object_ids_req.status_code) + '|' + target_object_ids_req.reason)
 
                     # query for fields in the object
                     object_describe = requests.get(instance_url + sObject['urls']['describe'], headers={'Authorization': 'Bearer ' + access_token, 'content-type': 'application/json'})
@@ -93,6 +165,9 @@ def get_objects_and_fields(schema_id):
 
                         if 'inlineHelpText' in field:
                             new_field.help_text = field['inlineHelpText']
+
+                        if schema.include_field_description and new_field.api_name in field_description_map:
+                            new_field.description = field_description_map[new_field.api_name]
 
                         # lookup field
                         if field['type'] == 'reference':

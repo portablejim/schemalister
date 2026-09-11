@@ -58,6 +58,14 @@
 						When this is checked, the Schema Lister will run queries to determine metadata where each field is used (eg. Workflows, Apex, Page Layouts etc). Takes substantially longer to run.
 					</p>
 				</div>
+				<div class="checkbox">
+					<label>
+						{{ schema_form.include_field_description }} Include field description?
+					</label>
+					<p style="margin-left: 2em; margin-top: 0.5em;">
+						When this is checked, the Schema Lister will find the field descriptions. Takes substantially longer to run.
+					</p>
+				</div>
 				<div style="text-align:center;height:50px;">
 							<input type="submit" name="logout" value="Logout" onclick="showLogout();" oncomplete="hideLogout();" />
 							<input type="submit" name="get_schema" value="Get Schema" onclick="hideTable();" oncomplete="showTable();" />
