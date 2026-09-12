@@ -50,7 +50,7 @@
 					console.log('Job Response', resp);
 			        if (resp.status == 'Finished')
 			        {
-			        	window.location = '/schema/{{ schema.random_id }}/{% if request.GET.noheader == "1" %}?noheader=1{% endif %}';
+			        	window.location.replace('/schema/{{ schema.random_id }}/{% if request.GET.noheader == "1" %}?noheader=1{% endif %}');
 			        } 
 			        else if (resp.status == 'Error')
 			        {
