@@ -1,0 +1,8 @@
+{
+  "cron": [
+    {
+      "command": "python manage.py delete_schemas",
+      "schedule": "@daily"
+    }
+  ]
+}
